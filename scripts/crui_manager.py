@@ -9,15 +9,38 @@ import visualization_msgs.msg
 import std_msgs.msg
 import external_controller_msgs.srv
 import external_controller_msgs.msg
+import graspit_interface.msg
 
 import typing
 import sys
 import moveit_commander
-import actionlib
 import curpp
 import world_manager
 import tf
-import tf_conversions.posemath as pm
+
+import crui_helpers
+
+
+class CRUIController:
+
+    def __init__(self):
+        self.execute_command_subscriber = rospy.Subscriber('/execute_command', std_msgs.msg.String, self.execute_command)
+
+        self.set_environment_service = rospy.Service(
+            "set_environment_service",
+            external_controller_msgs.srv.SetEnvironment,
+            self.set_environment
+        )
+
+        self.get_valid_commands_service = rospy.Service(
+            "valid_commands_service",
+            external_controller_msgs.srv.ValidCommands,
+            self.get_valid_commands
+        )
+
+    def execute_command(self, command):
+        # type: (std_msgs.msg.String) -> ()
+        pass
 
 
 class CRUIManager(object):
@@ -37,29 +60,18 @@ class CRUIManager(object):
 
         self.valid_command_publisher = rospy.Publisher("/valid_commands", external_controller_msgs.msg.ValidCommands)
         self.valid_environment_publisher = rospy.Publisher("/valid_environments", external_controller_msgs.msg.ValidEnvironments)
+        self.recognized_blocks_publisher = rospy.Publisher("/ui_recognized_objects", visualization_msgs.msg.MarkerArray)
 
         # Initialize subscribers
         self.execute_command_subscriber = rospy.Subscriber("/execute_command", std_msgs.msg.String, self.execute_command)
 
         # Initialize services
-        self.get_valid_commands_service = rospy.Service(
-            "valid_commands_service",
-            external_controller_msgs.srv.ValidCommands,
-            self.get_valid_commands
-        )
 
-        self.set_environment_service = rospy.Service(
-            "set_environment_service",
-            external_controller_msgs.srv.SetEnvironment,
-            self.get_valid_commands
-        )
+
 
         # Initialize action servers
 
         # Pull all params off param server
-        self.analyze_grasp_topic = rospy.get_param("analyze_grasp_topic")
-        self.execute_grasp_topic = rospy.get_param("execute_grasp_topic")
-        self.run_recognition_topic = rospy.get_param("run_recognition_topic")
         self.grasp_approach_tran_frame = rospy.get_param("grasp_approach_tran_frame")
         self.world_frame = rospy.get_param("world_frame")
         self.arm_move_group_name = rospy.get_param("arm_move_group_name")
@@ -69,6 +81,14 @@ class CRUIManager(object):
         self.executor_planner_id = rospy.get_param("executor_planner_id")
         self.allowed_analyzing_time = rospy.get_param("allowed_analyzing_time")
         self.allowed_execution_time = rospy.get_param("allowed_execution_time")
+
+        # State parameters
+        self.state = crui_helpers.CRUIState()
+
+        # Initialize instance variables
+        self.current_blocks = []
+        self.grasp_markers = {}
+        self.current_grasp_id = ""
 
         self.grasping_controller = curpp.MoveitPickPlaceInterface(
             arm_name=self.arm_move_group_name,
@@ -81,32 +101,13 @@ class CRUIManager(object):
         )
 
         self.scene = moveit_commander.PlanningSceneInterface()
-        self.block_recognition_client = block_recognition.BlockRecognitionClient()
         self.world_manager_client = world_manager.world_manager_client.WorldManagerClient()
         self.tf_listener = tf.TransformListener()
 
-        # Start grasp analyzer action server
-        self._analyze_grasp_as = actionlib.SimpleActionServer(self.analyze_grasp_topic,
-                                                              graspit_msgs.msg.CheckGraspReachabilityAction,
-                                                              execute_cb=self._analyze_grasp_reachability_cb,
-                                                              auto_start=False)
-        self._analyze_grasp_as.start()
-
-        # Start grasp execution action server
-        self._execute_grasp_as = actionlib.SimpleActionServer(self.execute_grasp_topic,
-                                                              graspit_msgs.msg.GraspExecutionAction,
-                                                              execute_cb=self._execute_grasp_cb,
-                                                              auto_start=False)
-        self._execute_grasp_as.start()
-
-        # Start object recognition action server
-        self._run_recognition_as = actionlib.SimpleActionServer(self.run_recognition_topic,
-                                                                graspit_msgs.msg.RunObjectRecognitionAction,
-                                                                execute_cb=self._run_recognition_cb,
-                                                                auto_start=False)
-        self._run_recognition_as.start()
-
         rospy.loginfo(self.__class__.__name__ + " is inited")
+
+    def execute_command(self, command):
+
 
     def _graspit_grasp_to_moveit_grasp(self, graspit_grasp):
         # type: (graspit_msgs.msg.Grasp) -> moveit_msgs.msg.Grasp
@@ -153,82 +154,73 @@ class CRUIManager(object):
 
         return moveit_grasp_msg
 
-    def _analyze_grasp_reachability_cb(self, goal):
-        # type: (graspit_msgs.msg.CheckGraspReachabilityGoal) -> graspit_msgs.msg.CheckGraspReachabilityResult
+    def _analyze_grasp_reachability(self, object_name, graspit_grasp):
+        # type: (str, graspit_interface.msg.Grasp) -> (moveit_msgs.msg.PickupResult, bool)
         """
         @return: Whether the grasp is expected to succeed
         """
         # Convert graspit grasp to moveit grasp
-        rospy.loginfo("Analyzing grasp for object: {}".format(goal.grasp.object_name))
+        rospy.loginfo("Analyzing grasp for object: {}".format(object_name))
 
         block_names = self.scene.get_attached_objects().keys()
         self.grasping_controller.detach_all_blocks(block_names)
 
-        moveit_grasp_msg = self._graspit_grasp_to_moveit_grasp(goal.grasp)
-        success, pick_result = self.grasping_controller.analyze_moveit_grasp(goal.grasp.object_name, moveit_grasp_msg)
+        moveit_grasp_msg = self._graspit_grasp_to_moveit_grasp(graspit_grasp)
+        success, pick_result = self.grasping_controller.analyze_moveit_grasp(object_name, moveit_grasp_msg)
 
-        result = graspit_msgs.msg.CheckGraspReachabilityResult()
-        result.isPossible = success
-        result.grasp_id = goal.grasp.grasp_id
+        rospy.loginfo("Able to execute grasp with grasp id {} after analysis: {}".format(moveit_grasp_msg.id, success))
 
-        rospy.loginfo("Able to execute grasp with grasp id {} after analysis: {}".format(goal.grasp.grasp_id, success))
-        self._analyze_grasp_as.set_succeeded(result)
+        return pick_result, success
 
-        return []
-
-    def _execute_grasp_cb(self, goal):
-        # type: (graspit_msgs.msg.GraspExecutionGoal) -> graspit_msgs.msg.GraspExecutionResult
+    def _execute_grasp(self, object_name, graspit_grasp):
+        # type: (str, graspit_interface.msg.Grasp) -> bool
         rospy.loginfo("Executing grasp goal")
-        result = graspit_msgs.msg.GraspExecutionResult()
-        result.success = False
 
         block_names = self.scene.get_attached_objects().keys()
         self.grasping_controller.detach_all_blocks(block_names)
 
         # Acquire block position for place
-        objects = self.scene.get_object_poses([goal.grasp.object_name])
-        if not goal.grasp.object_name in objects:
-            rospy.logerr("Object {} not in planning scene. Execute grasp failed".format(goal.grasp.object_name))
-            self._execute_grasp_as.set_aborted(result)
-            return []
+        objects = self.scene.get_object_poses([object_name])
+        if object_name not in objects:
+            rospy.logerr("Object {} not in planning scene. Execute grasp failed".format(object_name))
+            return False
 
         block_pose_stamped = geometry_msgs.msg.PoseStamped()
-        block_pose_stamped.pose = objects[goal.grasp.object_name]
+        block_pose_stamped.pose = objects[object_name]
         block_pose_stamped.header.frame_id = self.grasping_controller.get_planning_frame()
 
-        rospy.loginfo("Object {} in planning scene. Pose: {}".format(goal.grasp.object_name, block_pose_stamped.pose))
+        rospy.loginfo("Object {} in planning scene. Pose: {}".format(object_name, block_pose_stamped.pose))
 
         # Shift block pose to place location in param server
         block_pose_stamped.pose.position.x = rospy.get_param("final_block_position_x")
         block_pose_stamped.pose.position.y = rospy.get_param("final_block_position_y")
         block_pose_stamped.pose.position.z = rospy.get_param("final_block_position_z")
 
-        rospy.loginfo("Placing block as position ({}, {}, {})"
-                      .format(block_pose_stamped.pose.position.x,
-                              block_pose_stamped.pose.position.y,
-                              block_pose_stamped.pose.position.z))
-
         # Convert graspit grasp to moveit grasp
         moveit_grasp_msg = self._graspit_grasp_to_moveit_grasp(goal.grasp)
 
         # Execute pick on block
-        success, pick_result = self.grasping_controller.execute_moveit_grasp(goal.grasp.object_name, moveit_grasp_msg)
+        success, pick_result = self.grasping_controller.execute_moveit_grasp(object_name, moveit_grasp_msg)
         # type: pick_result -> moveit_msgs.msg.PickupResult
 
         if not success:
-            rospy.logerr("Failed to execute pick. Reason: {}".format(pick_result))
-            self._execute_grasp_as.set_aborted(result)
+            error_code = curpp.moveit_error_code_to_string(pick_result.error_code)
+            rospy.logerr("Failed to execute pick. Reason: {}".format(error_code))
             return []
         else:
             rospy.loginfo("Successfully executed pick")
 
+        rospy.loginfo("Placing block as position ({}, {}, {})"
+                      .format(block_pose_stamped.pose.position.x,
+                              block_pose_stamped.pose.position.y,
+                              block_pose_stamped.pose.position.z))
         # Execute place on block
-        success, place_result = self.grasping_controller.place(goal.grasp.object_name, pick_result, block_pose_stamped)
+        success, place_result = self.grasping_controller.place(object_name, pick_result, block_pose_stamped)
 
         if not success:
-            rospy.logerr("Failed to execute place. Reason: {}".format(place_result))
-            self._execute_grasp_as.set_aborted(result)
-            return []
+            error_code = curpp.moveit_error_code_to_string(place_result.error_code)
+            rospy.logerr("Failed to execute place. Reason: {}".format(error_code))
+            return False
         else:
             rospy.loginfo("Successfully executed place")
 
@@ -236,37 +228,29 @@ class CRUIManager(object):
         success = self.grasping_controller.home_arm()
         if not success:
             rospy.logerr("Failed to home arm")
-            self._execute_grasp_as.set_aborted(result)
-            return []
+            return False
         else:
             rospy.loginfo("Successfully homed arm")
 
         success = self.grasping_controller.open_hand()
         if not success:
             rospy.logerr("Failed to open hand")
-            self._execute_grasp_as.set_aborted(result)
-            return []
+            return False
         else:
             rospy.loginfo("Successfully opened hand")
 
-        result.success = True
-        self._execute_grasp_as.set_succeeded(result)
+        return True
 
-        return []
-
-    def _run_recognition_cb(self, goal):
+    def _run_recognition(self):
         rospy.loginfo("Running recognition")
-        result = graspit_msgs.msg.RunObjectRecognitionResult()
-        # type: result -> graspit_msgs.msg.RunObjectRecognitionResult
 
         self.world_manager_client.clear_objects()
 
-        detected_blocks = self.block_recognition_client.find_blocks()
+        detected_blocks = block_recognition.find_blocks()
         # type: detected_blocks -> typing.List[block_recognition.msg.DetectedBlock]
 
         if len(detected_blocks) == 0:
-            rospy.loginfo("Detected no blocks. No work done. ")
-            self._run_recognition_as.set_succeeded(result)
+            rospy.loginfo("Detected no blocks. No work done.")
             return []
 
         rospy.loginfo("Detected {} blocks".format(len(detected_blocks)))
@@ -274,25 +258,63 @@ class CRUIManager(object):
         for detected_block in detected_blocks:
             # Add all blocks to the scene
             self.world_manager_client.add_box(detected_block.unique_block_name,
-                                             detected_block.pose_stamped,
-                                             detected_block.edge_length,
-                                             detected_block.edge_length,
-                                             detected_block.edge_length)
-
-            self.tf_listener.waitForTransform(self.world_frame, detected_block.unique_block_name, rospy.Time(0), rospy.Duration(10))
-            detected_block_world_pose = pm.toMsg(pm.fromTf(self.tf_listener.lookupTransform(self.world_frame, detected_block.unique_block_name, rospy.Time(0))))
+                                              detected_block.pose_stamped,
+                                              detected_block.edge_length,
+                                              detected_block.edge_length,
+                                              detected_block.edge_length)
 
             # Add blocks to graspit result
-            object_info = graspit_msgs.msg.ObjectInfo(
-                detected_block.unique_block_name,
-                detected_block.mesh_filename,
-                detected_block_world_pose
-            )
-            result.object_info.append(object_info)
+            self.current_blocks = detected_blocks
 
-        rospy.loginfo("Finished recognition")
-        self._run_recognition_as.set_succeeded(result)
-        return []
+    def _remove_block_markers(self):
+        marker_array = visualization_msgs.msg.MarkerArray()
+
+        for block in self.current_blocks:
+            marker = visualization_msgs.msg.Marker()
+            marker.action = visualization_msgs.msg.Marker.DELETE
+            marker.id = block.unique_id
+            marker_array.markers.append(marker)
+
+        self.recognized_blocks_publisher.publish(marker_array)
+
+    def _add_block_markers(self):
+        marker_array = visualization_msgs.msg.MarkerArray()
+
+        for block in self.current_blocks:
+            # type: block -> block_recognition.msg.DetectedBlock
+            marker = visualization_msgs.msg.Marker()
+
+            marker.header = block.pose_stamped.header
+            marker.type = visualization_msgs.msg.Marker.CUBE
+            marker.action = visualization_msgs.msg.Marker.ADD
+            marker.lifetime = rospy.Duration(0) # Show block until it is deleted
+
+            # Add scaling factor based on the size of the cube
+            marker.scale.x = block.edge_length
+            marker.scale.y = block.edge_length
+            marker.scale.z = block.edge_length
+
+            # Burlywood color
+            marker.color.a = 1.0
+            marker.color.r = 0.870588
+            marker.color.g = 0.721569
+            marker.color.b = 0.529412
+
+            marker.id = block.unique_id
+            marker.pose = block.pose_stamped.pose
+
+            marker_array.markers.append(marker)
+
+        self.recognized_blocks_publisher.publish(marker_array)
+
+    def _listen_for_grasp_markers(self):
+        pass
+
+    def _publish_grasp_marker(self, id):
+        pass
+
+    def publish_topics(self):
+        pass
 
 
 def main():
@@ -301,6 +323,7 @@ def main():
         loop = rospy.Rate(10)
 
         while not rospy.is_shutdown():
+            crui_manager.publish_topics()
             loop.sleep()
         moveit_commander.roscpp_shutdown()
     except rospy.ROSInterruptException:
