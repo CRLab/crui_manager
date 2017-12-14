@@ -79,7 +79,7 @@ class CRUIController:
         self.publish_valid_commands()
         rospy.loginfo(self.__class__.__name__ + " is inited")
 
-    def get_valid_commands(self):
+    def get_valid_commands(self, request):
         current_commands = external_controller_msgs.srv.CurrentCommandsResponse()
         current_commands.commands = self.current_state.options
         current_commands.parent = self.current_state.parent
@@ -159,5 +159,6 @@ class CRUIController:
             self.crui_manager.stop_execution()
         else:
             rospy.logerr("Command '{}' is not an executable command.".format(command))
+            return False
 
-        return result
+        return True

@@ -32,7 +32,7 @@ def _create_marker(block, is_highlighted):
         marker.scale.y = block.edge_length * 1.1
         marker.scale.z = block.edge_length * 1.1
         marker.color = CRUIManager.HIGHLIGHTED_BLOCK_COLOR
-        marker.id = "highlighted"
+        marker.id = -1  # "highlighted"
     else:
         # Add scaling factor based on the size of the cube
         marker.scale.x = block.edge_length
@@ -314,11 +314,14 @@ class CRUIManager(object):
         self._chosen_block = self._highlighted_block
 
         # Load block file from iv
-        block_path = os.path.join(rospkg.get_ros_package_path('crui_manager'), 'resources', self._chosen_block.mesh_filename)
+        rospack = rospkg.RosPack()
+        package_path = rospack.get_path('crui_manager')
+        block_path = os.path.join(package_path, 'resources', self._chosen_block.mesh_filename + ".xml")
 
         # Plan n grasps on block
         self._graspit_commander.clearWorld()
         self._graspit_commander.importGraspableBody(block_path)
+        self._graspit_commander.importRobot("MicoGripper")
 
         # resolution, sampling_type (1 is above sampler)
         rospy.loginfo("Computing grasps on object '{}' with mesh '{}'".format(self._chosen_block.unique_id, self._chosen_block.mesh_filename))

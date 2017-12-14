@@ -1,6 +1,6 @@
 <?xml version="1.0" ?>
 <root>
-	<geometryScaling>2.5</geometryScaling>
+	<geometryScaling>25</geometryScaling>
 	<geometryOffset>
       <transform>
         <translation>0.0 0.0 -32</translation>
