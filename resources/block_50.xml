@@ -1,0 +1,10 @@
+<?xml version="1.0" ?>
+<root>
+	<geometryScaling>1.5</geometryScaling>
+	<geometryOffset>
+      <transform>
+        <translation>0.0 0.0 -25</translation>
+      </transform>
+    </geometryOffset>
+	<geometryFile type="Inventor">block.iv</geometryFile>
+</root>
