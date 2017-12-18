@@ -10,11 +10,39 @@ import typing
 import moveit_commander
 import curpp
 import world_manager
-import grid_sample_client
-import graspit_commander
+# import grid_sample_client
+# import graspit_commander
 import tf
-import rospkg
-import os
+# import rospkg
+# import os
+import pyquaternion
+import numpy as np
+
+
+def construct_graspit_grasp(position, orientation):
+    graspit_grasp_msg = graspit_interface.msg.Grasp()
+    pose = geometry_msgs.msg.Pose()
+    pose.position = position
+    pose.orientation = orientation
+    graspit_grasp_msg.pose = pose
+    return graspit_grasp_msg
+
+
+def plan_grasps():
+    position = geometry_msgs.msg.Point(x=0, y=0, z=0.080)
+
+    normal_orientation = pyquaternion.Quaternion(x=0, y=0, z=0, w=1)
+    rotated_orientation = pyquaternion.Quaternion(axis=[1, 0, 0], angle=np.pi/2)
+    rotated_orientation = rotated_orientation * normal_orientation
+
+    geom_orient = geometry_msgs.msg.Quaternion(x=normal_orientation[0], y=normal_orientation[1], z=normal_orientation[2], w=normal_orientation[3])
+    geom_orient_rot = geometry_msgs.msg.Quaternion(x=rotated_orientation[0], y=rotated_orientation[1], z=rotated_orientation[2], w=rotated_orientation[3])
+
+    grasps = list()
+    grasps.append(construct_graspit_grasp(position, geom_orient))
+    grasps.append(construct_graspit_grasp(position, geom_orient_rot))
+
+    return grasps
 
 
 def _create_marker(block, is_highlighted):
@@ -28,16 +56,16 @@ def _create_marker(block, is_highlighted):
 
     if is_highlighted:
         # Add scaling factor based on the size of the cube * 1.1 for highlighted
-        marker.scale.x = block.edge_length * 1.1
-        marker.scale.y = block.edge_length * 1.1
-        marker.scale.z = block.edge_length * 1.1
+        marker.scale.x = block.edge_length * 1.3
+        marker.scale.y = block.edge_length * 1.3
+        marker.scale.z = block.edge_length * 1.3
         marker.color = CRUIManager.HIGHLIGHTED_BLOCK_COLOR
         marker.id = -1  # "highlighted"
     else:
         # Add scaling factor based on the size of the cube
-        marker.scale.x = block.edge_length
-        marker.scale.y = block.edge_length
-        marker.scale.z = block.edge_length
+        marker.scale.x = block.edge_length * 1.1
+        marker.scale.y = block.edge_length * 1.1
+        marker.scale.z = block.edge_length * 1.1
         marker.color = CRUIManager.NORMAL_BLOCK_COLOR
         marker.id = block.unique_id
 
@@ -82,7 +110,7 @@ class CRUIManager(object):
         self.grasp_markers = {}
         self.current_grasp_id = ""
         self._successful_grasps = []
-        self._current_grasp = graspit_interface.msg.Grasp()
+        self._current_grasp = {}
         self._current_grasp_index = 0
 
         # Initialize ros service interfaces
@@ -99,7 +127,7 @@ class CRUIManager(object):
         self.scene = moveit_commander.PlanningSceneInterface()
         self.world_manager_client = world_manager.world_manager_client.WorldManagerClient()
         self.tf_listener = tf.TransformListener()
-        self._graspit_commander = graspit_commander.GraspitCommander()
+        # self._graspit_commander = graspit_commander.GraspitCommander()
 
         rospy.loginfo(self.__class__.__name__ + " is inited")
 
@@ -282,8 +310,9 @@ class CRUIManager(object):
         self._recognized_blocks_publisher.publish(marker_array)
 
     def _publish_grasp_marker(self):
-        if self._current_grasp.grasp_marker is not None:
-            grasp_marker = self._current_grasp.grasp_marker
+        self._remove_grasp_marker()
+        if self._current_grasp.get("grasp_marker", None) is not None:
+            grasp_marker = self._current_grasp.get("grasp_marker", None)
             self._current_grasp_publisher.publish(grasp_marker)
 
     def _remove_grasp_marker(self):
@@ -314,19 +343,20 @@ class CRUIManager(object):
         self._chosen_block = self._highlighted_block
 
         # Load block file from iv
-        rospack = rospkg.RosPack()
-        package_path = rospack.get_path('crui_manager')
-        block_path = os.path.join(package_path, 'resources', self._chosen_block.mesh_filename + ".xml")
+        # rospack = rospkg.RosPack()
+        # package_path = rospack.get_path('crui_manager')
+        # block_path = os.path.join(package_path, 'resources', self._chosen_block.mesh_filename + ".xml")
 
         # Plan n grasps on block
-        self._graspit_commander.clearWorld()
-        self._graspit_commander.importGraspableBody(block_path)
-        self._graspit_commander.importRobot("MicoGripper")
+        # self._graspit_commander.clearWorld()
+        # self._graspit_commander.importGraspableBody(block_path)
+        # self._graspit_commander.importRobot("MicoGripper")
 
         # resolution, sampling_type (1 is above sampler)
-        rospy.loginfo("Computing grasps on object '{}' with mesh '{}'".format(self._chosen_block.unique_id, self._chosen_block.mesh_filename))
-        pre_grasps = grid_sample_client.GridSampleClient.computePreGrasps(resolution=10, sampling_type=1)
-        grasps = grid_sample_client.GridSampleClient.evaluatePreGrasps(pre_grasps.grasps)
+        rospy.loginfo("Computing grasps on object '{}' with mesh '{}'".format(self._chosen_block.unique_block_name, self._chosen_block.mesh_filename))
+        # pre_grasps = grid_sample_client.GridSampleClient.computePreGrasps(resolution=10, sampling_type=1)
+        # grasps = grid_sample_client.GridSampleClient.evaluatePreGrasps(pre_grasps.grasps)
+        grasps = plan_grasps()
 
         # Create variable current_grasp_name = None
         current_grasp_name = "grasp0"
@@ -334,8 +364,9 @@ class CRUIManager(object):
 
         # Create subscriber to /move_group/display_grasp_markers
         def listen_for_grasp_markers(markers):
+            # type: (visualization_msgs.msg.MarkerArray) -> ()
             print("Received marker for grasp '{}'".format(current_grasp_name))
-            for marker in markers:
+            for marker in markers.markers:
                 marker.color = CRUIManager.GRASP_MARKER_COLOR
             grasp_markers[current_grasp_name] = markers
         grasp_marker_subscriber = rospy.Subscriber('/move_group/display_grasp_markers', visualization_msgs.msg.MarkerArray, listen_for_grasp_markers)
@@ -344,14 +375,16 @@ class CRUIManager(object):
         analyzed_grasps = []
         for index, grasp in enumerate(grasps):
             # Assign current_grasp_name to "grasp{}".format(index)
+            current_grasp_dict = {}
             current_grasp_name = "grasp{}".format(index)
-            grasp.grasp_name = current_grasp_name
+            current_grasp_dict["grasp_name"] = current_grasp_name
+            current_grasp_dict["grasp"] = grasp
 
             # Analyze grasp
-            pickup_result, success = self._analyze_grasp_reachability(self._chosen_block.unique_id, grasp)
+            pickup_result, success = self._analyze_grasp_reachability(self._chosen_block.unique_block_name, grasp)
 
             # Store successful results in analyzed_grasps
-            analyzed_grasps.append(grasp)
+            analyzed_grasps.append(current_grasp_dict)
 
         # Make sure we captured n grasps from display_grasp_markers
         for i in range(4):
@@ -363,7 +396,7 @@ class CRUIManager(object):
         print("Total of {} grasps were successful out of {}".format(len(analyzed_grasps), len(grasps)))
         self._successful_grasps = []
         for grasp in analyzed_grasps:
-            grasp.grasp_marker = grasp_markers.get(grasp.grasp_name, visualization_msgs.msg.MarkerArray())
+            grasp["grasp_marker"] = grasp_markers.get(grasp["grasp_name"], visualization_msgs.msg.MarkerArray())
             self._successful_grasps.append(grasp)
 
         # Publish current grasp marker for grasp0
@@ -432,11 +465,11 @@ class CRUIManager(object):
         self._successful_grasps = []
 
         # Execute grasp
-        success = self._execute_grasp(self._chosen_block.unique_id, self._current_grasp)
+        success = self._execute_grasp(self._chosen_block.unique_block_name, self._current_grasp["grasp"])
 
         # Rerun vision
         self._chosen_block = None
-        self._current_grasp = None
+        self._current_grasp = {}
         self.rerun_vision()
 
     def back_from_select_grasp(self):
@@ -445,7 +478,7 @@ class CRUIManager(object):
         # Clear grasps from scene
         self._remove_grasp_marker()
         self._successful_grasps = []
-        self._current_grasp = None
+        self._current_grasp = {}
         self._current_grasp_index = 0
 
     def stop_execution(self):
@@ -456,7 +489,7 @@ class CRUIManager(object):
         # Clear grasps and blocks from scene
         self._remove_grasp_marker()
         self._successful_grasps = []
-        self._current_grasp = None
+        self._current_grasp = {}
         self._current_grasp_index = 0
 
         # Rerun vision

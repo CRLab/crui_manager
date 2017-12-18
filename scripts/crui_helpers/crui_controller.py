@@ -55,7 +55,7 @@ class CRUIController:
                 options=['next grasp', 'select grasp', 'back'],
                 transitions={
                     'next grasp': 'grasp selection',
-                    'select grasp': 'grasp execution',
+                    'select grasp': 'main menu',
                     'back': 'main menu'
                 },
                 menu_type='submenu',
