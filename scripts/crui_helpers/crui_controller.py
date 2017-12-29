@@ -124,7 +124,6 @@ class CRUIController:
         self.current_status = CRUIController.LOADING_STATUS
         self.publish_status()
 
-
         if command not in self.current_state.transitions:
             rospy.logwarn("Command '{}' is not a transition in state '{}'. Ignoring command.".format(command, self.current_state.name))
             return
@@ -141,8 +140,6 @@ class CRUIController:
         self.publish_valid_commands()
 
     def handle_command(self, command):
-        result = False
-
         if command == 'next block':
             self.crui_manager.next_block()
         elif command == 'select block':

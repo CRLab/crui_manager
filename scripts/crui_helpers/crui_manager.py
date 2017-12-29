@@ -1,11 +1,12 @@
 import rospy
 import moveit_msgs.msg
 import geometry_msgs.msg
-import block_recognition.msg
+import block_recognition_msgs.msg
 import visualization_msgs.msg
 import graspit_interface.msg
 import std_msgs.msg
 
+import block_recognition
 import typing
 import moveit_commander
 import curpp
@@ -85,7 +86,6 @@ class CRUIManager(object):
     # GRASP_MARKER_COLOR = std_msgs.msg.ColorRGBA(r=0.63529411764, g=0.67058823529, b=0.34509803921, a=1.0)
     GRASP_MARKER_COLOR = std_msgs.msg.ColorRGBA(r=0.5, g=1.0, b=0.5, a=1.0)
 
-
     def __init__(self):
 
         # Initialize publishers
@@ -107,9 +107,9 @@ class CRUIManager(object):
 
         # Initialize instance variables
         self._current_blocks = []
-        self._highlighted_block = block_recognition.msg.DetectedBlock()
+        self._highlighted_block = block_recognition_msgs.msg.DetectedBlock()
         self._highlighted_block_index = 0
-        self._chosen_block = block_recognition.msg.DetectedBlock()
+        self._chosen_block = block_recognition_msgs.msg.DetectedBlock()
 
         self.grasp_markers = {}
         self.current_grasp_id = ""
@@ -274,7 +274,7 @@ class CRUIManager(object):
         self.world_manager_client.clear_objects()
 
         detected_blocks = block_recognition.find_blocks()
-        # type: detected_blocks -> typing.List[block_recognition.msg.DetectedBlock]
+        # type: detected_blocks -> typing.List[block_recognition_msgs.msg.DetectedBlock]
 
         if len(detected_blocks) == 0:
             rospy.loginfo("Detected no blocks. No work done.")
@@ -421,7 +421,7 @@ class CRUIManager(object):
 
         # Call block recognition
         detected_blocks = block_recognition.find_blocks()
-        # type: detected_blocks -> typing.List[block_recognition.msg.DetectedBlock]
+        # type: detected_blocks -> typing.List[block_recognition_msgs.msg.DetectedBlock]
 
         if len(detected_blocks) == 0:
             rospy.loginfo("Detected no blocks. No work done.")

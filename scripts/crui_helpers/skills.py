@@ -1,11 +1,11 @@
 import rospy
 import moveit_msgs.msg
 import geometry_msgs.msg
-import block_recognition.msg
+import block_recognition_msgs.msg
 import visualization_msgs.msg
 import graspit_interface.msg
-import std_msgs.msg
 
+import block_recognition
 import typing
 import moveit_commander
 import curpp
@@ -44,7 +44,7 @@ def plan_grasps():
 
 
 def _create_marker(block, is_highlighted):
-    # type: (block_recognition.msg.DetectedBlock) -> visualization_msgs.msg.Marker
+    # type: (block_recognition_msgs.msg.DetectedBlock) -> visualization_msgs.msg.Marker
     marker = visualization_msgs.msg.Marker()
 
     marker.header = block.pose_stamped.header
@@ -78,7 +78,7 @@ class SkillManager:
 
         # Initialize publishers
         self._recognized_blocks_publisher = rospy.Publisher("/ui_recognized_objects", visualization_msgs.msg.MarkerArray, queue_size=1)
-        self._current_grasp_publisher = rospy.Publisher("/ui_current_grasp", visualization_msgs.msg.MarkerArray, queue_size=1)
+        self._grasp_marker_publisher = rospy.Publisher("/ui_current_grasp", visualization_msgs.msg.MarkerArray, queue_size=1)
 
         # Pull all params off param server
         self.grasp_approach_tran_frame = rospy.get_param("grasp_approach_tran_frame")
@@ -89,7 +89,7 @@ class SkillManager:
         self.analyzer_planner_id = rospy.get_param("analyzer_planner_id")
         self.executor_planner_id = rospy.get_param("executor_planner_id")
         self.allowed_analyzing_time = rospy.get_param("allowed_analyzing_time")
-        self.allowed_execution_time = rospy.get_hparam("allowed_execution_time")
+        self.allowed_execution_time = rospy.get_param("allowed_execution_time")
 
         # Initialize ros service interfaces
         self.grasping_controller = curpp.MoveitPickPlaceInterface(
@@ -247,7 +247,7 @@ class SkillManager:
         self.world_manager_client.clear_objects()
 
         detected_blocks = block_recognition.find_blocks()
-        # type: detected_blocks -> typing.List[block_recognition.msg.DetectedBlock]
+        # type: detected_blocks -> typing.List[block_recognition_msgs.msg.DetectedBlock]
 
         if len(detected_blocks) == 0:
             rospy.loginfo("Detected no blocks. No work done.")
@@ -286,15 +286,13 @@ class SkillManager:
 
         self._recognized_blocks_publisher.publish(marker_array)
 
-    def _publish_grasp_marker(self):
-        self._remove_grasp_marker()
-        if self._current_grasp.get("grasp_marker", None) is not None:
-            grasp_marker = self._current_grasp.get("grasp_marker", None)
-            self._current_grasp_publisher.publish(grasp_marker)
+    def publish_grasp_marker(self, grasp_marker):
+        self.remove_all_grasp_markers()
+        self._grasp_marker_publisher.publish(grasp_marker)
 
-    def _remove_grasp_marker(self):
+    def remove_all_grasp_markers(self):
         grasp_marker = visualization_msgs.msg.MarkerArray()
         delete_all_marker = visualization_msgs.msg.Marker()
         delete_all_marker.action = visualization_msgs.msg.Marker.DELETEALL
         grasp_marker.markers.append(delete_all_marker)
-        self._current_grasp_publisher.publish(grasp_marker)
+        self._grasp_marker_publisher.publish(grasp_marker)
