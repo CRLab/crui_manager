@@ -5,7 +5,13 @@ import external_controller_msgs.msg
 
 import collections
 
-CRUIState = collections.namedtuple('CRUIState', ['name', 'options', 'transitions', 'menu_type', 'parent'])
+# CRUIState = collections.namedtuple('CRUIState', ['name', 'options', 'transitions', 'menu_type', 'parent'])
+
+
+class CRUIState:
+    pass
+
+
 
 
 class CRUIController:

@@ -8,17 +8,17 @@ project(crui_manager)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-#    roscpp
-#    roscpp_serialization
-#    std_msgs
+    roscpp
+    roscpp_serialization
+    std_msgs
 )
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
 ## Both Boost.python and Python libs are required.
-#find_package(Boost REQUIRED COMPONENTS python)
-#find_package(PythonLibs 2.7 REQUIRED)
+find_package(Boost REQUIRED COMPONENTS python)
+find_package(PythonLibs 2.7 REQUIRED)
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -107,7 +107,7 @@ catkin_python_setup()
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #    INCLUDE_DIRS include
-#    LIBRARIES add_two_ints _add_two_ints_wrapper_cpp get_grasp_markers _get_grasp_markers_wrapper_cpp
+#    LIBRARIES generate_grasp_markers _generate_grasp_markers_wrapper_cpp
 #    CATKIN_DEPENDS roscpp
     #  DEPENDS system_lib
 )
@@ -126,11 +126,8 @@ include_directories(
 )
 
 ## Declare a C++ library
-#add_library(add_two_ints src/add_two_ints.cpp)
-#add_library(_add_two_ints_wrapper_cpp src/add_two_ints_wrapper.cpp)
-#
-#add_library(get_grasp_markers src/get_grasp_markers.cpp)
-#add_library(_get_grasp_markers_wrapper_cpp src/get_grasp_markers_wrapper.cpp)
+#add_library(generate_grasp_markers src/generate_grasp_markers.cpp)
+#add_library(_generate_grasp_markers_wrapper_cpp src/generate_grasp_markers_wrapper.cpp)
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -151,7 +148,7 @@ include_directories(
 #    LIBRARY_OUTPUT_DIRECTORY ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_PYTHON_DESTINATION}
 #)
 #
-#set_target_properties(_get_grasp_markers_wrapper_cpp PROPERTIES
+#set_target_properties(_generate_grasp_markers_wrapper_cpp PROPERTIES
 #    PREFIX ""
 #    LIBRARY_OUTPUT_DIRECTORY ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_PYTHON_DESTINATION}
 #)
@@ -161,11 +158,8 @@ include_directories(
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-#target_link_libraries(add_two_ints ${catkin_LIBRARIES})
-#target_link_libraries(_add_two_ints_wrapper_cpp add_two_ints ${catkin_LIBRARIES} ${Boost_LIBRARIES})
-#
-#target_link_libraries(get_grasp_markers ${catkin_LIBRARIES})
-#target_link_libraries(_get_grasp_markers_wrapper_cpp add_two_ints ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+#target_link_libraries(generate_grasp_markers ${catkin_LIBRARIES})
+#target_link_libraries(_generate_grasp_markers_wrapper_cpp generate_grasp_markers ${catkin_LIBRARIES} ${Boost_LIBRARIES})
 
 #############
 ## Install ##
