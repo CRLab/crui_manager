@@ -3,15 +3,13 @@
 import rospy
 import sys
 import moveit_commander
-
-from crui_helpers import CRUIController, CRUIManager
+from crui.controller import CRUIController
 
 
 def main():
     rospy.init_node('crui_manager')
     moveit_commander.roscpp_initialize(sys.argv)
-    crui_manager = CRUIManager()
-    crui_controller = CRUIController(crui_manager)
+    _ = CRUIController()
 
     try:
         loop = rospy.Rate(10)
