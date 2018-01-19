@@ -17,6 +17,7 @@ class CRUIController:
         self._republish_scene_service = rospy.Service('/rebroadcast_scene', std_srvs.srv.Empty, self._rebroadcast)
 
     def _execute_command(self, command_str):
+        rospy.loginfo("Executing command {}".format(command_str))
         try:
             self._crui_state.publish_loading_status()
             next_menu = self._current_menu.execute_command(command_str)
@@ -26,6 +27,7 @@ class CRUIController:
             rospy.loginfo("Unable to parse command {}".format(command_str))
 
     def _rebroadcast(self, _):
+        rospy.loginfo("Rebroadcasting scene")
         self._crui_state.publish_block_markers()
         self._crui_state.publish_grasp_marker()
         self._crui_state.publish_all_place_positions()

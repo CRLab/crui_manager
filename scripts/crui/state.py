@@ -62,7 +62,7 @@ class CRUIState:
 
         self.status_publisher = rospy.Publisher('/crui_bot_status', std_msgs.msg.String, queue_size=1)
         self.valid_commands_publisher = rospy.Publisher('/valid_commands', external_controller_msgs.msg.ValidCommands, queue_size=1)
-        self.update_publisher = rospy.Publisher('/update_message', std_msgs.msg.String)
+        self.update_publisher = rospy.Publisher('/update_message', std_msgs.msg.String, queue_size=1)
 
         self.set_environment_service = rospy.Service(
             "set_environment_service",
@@ -139,7 +139,7 @@ class CRUIState:
     @property
     def highlighted_block(self):
         if len(self._current_blocks) == 0:
-            return block_recognition_msgs.msg.DetectedBlock()
+            return None
         return self._current_blocks[self._highlighted_block_index]
 
     @property
@@ -193,7 +193,7 @@ class CRUIState:
     @property
     def selected_place_position(self):
         if len(self._place_positions) == 0:
-            return geometry_msgs.msg.Point()
+            return None
         return self._place_positions[self._selected_place_position_index]
 
     @property
@@ -217,8 +217,10 @@ class CRUIState:
 
         marker_array = visualization_msgs.msg.MarkerArray()
 
-        for block in self.current_blocks:
-            marker_array.markers.append(curpp.skills.create_block_marker(block, is_highlighted=False, color=block_color))
+        marker_array.markers = [
+            curpp.skills.create_block_marker(block, is_highlighted=False, color=block_color)
+            for block in self.current_blocks
+        ]
 
         if self.highlighted_block is not None:
             marker_array.markers.append(curpp.skills.create_block_marker(self.highlighted_block,
